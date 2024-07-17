@@ -1,0 +1,9 @@
+name: CraftingTracker
+version: '1.0-SNAPSHOT'
+main: com.dstokesncstudio.craftingTracker.CraftingTracker
+api-version: '1.21'
+commands:
+  craftingstats:
+    description: Display crafting stats of a player or leaderboard
+    usage: /craftingstats <player>|leaderboard
+    permission: craftingstats.use
