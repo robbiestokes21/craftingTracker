@@ -1,49 +1,121 @@
 package com.dstokesncstudio.craftingTracker;
 
+
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabExecutor;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.Yaml;
 
+import org.jetbrains.annotations.NotNull;
+import java.io.File;
+import java.io.IOException;
+
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
 public class CraftingTracker extends JavaPlugin implements Listener, TabExecutor {
 
     private final Map<UUID, Map<Material, Integer>> craftingStats = new HashMap<>();
+    //TODO Add save and load of all the player stats once plugin updates.
+    File dataFile;
+
+    //TODO Add this once the database class is set.
+    //Database Stuff //
+    /*
+    private boolean databaseEnabled;
+    private String dbHost;
+    private int dbPort;
+    private String dbName;
+    private String dbUser;
+    private String dbPassword;
+    */
 
     @Override
     public void onEnable() {
+        //TODO This is for the saving and loading of the config file
+       /*
+        // Save the default config if it doesn't exist
+        // saveDefaultConfig();
+
+        // Load the configuration
+        // loadConfiguration();
+
+        */
+
+        // Register events and commands
         Bukkit.getPluginManager().registerEvents(this, this);
-        this.getCommand("craftingstats").setExecutor(this);
+        Objects.requireNonNull(this.getCommand("craftingstats")).setExecutor(this);
+        Objects.requireNonNull(this.getCommand("craftingstats")).setTabCompleter(this);
+
+        dataFile = new File(getDataFolder(), "craftingStats.yml");
+        if (!dataFile.exists()) {
+            saveResource("craftingStats.yml", false); // Create the file if it doesn't exist
+        }
+        loadCraftingStats();
+    }
+    @Override
+    public void onDisable() {
+        saveCraftingStats();
+    }
+    //TODO use this latter when creating the database class.
+    private void loadConfiguration() {
+        /*
+        FileConfiguration config = getConfig();
+
+        databaseEnabled = config.getBoolean("database.enabled");
+        dbHost = config.getString("database.host");
+        dbPort = config.getInt("database.port");
+        dbName = config.getString("database.database");
+        dbUser = config.getString("database.user");
+        dbPassword = config.getString("database.password");
+
+        getLogger().info("Database enabled: " + databaseEnabled);
+        if (databaseEnabled) {
+            getLogger().info("Connecting to database at " + dbHost + ":" + dbPort);
+            // Initialize your database connection here
+        }
+         */
     }
 
     @EventHandler
     public void onCraftItem(CraftItemEvent event) {
-        if (event.getWhoClicked() instanceof Player) {
-            Player player = (Player) event.getWhoClicked();
+        if (event.getWhoClicked() instanceof Player player) {
             UUID playerId = player.getUniqueId();
             Material itemType = event.getRecipe().getResult().getType();
 
             craftingStats.putIfAbsent(playerId, new HashMap<>());
             Map<Material, Integer> playerStats = craftingStats.get(playerId);
             playerStats.put(itemType, playerStats.getOrDefault(itemType, 0) + event.getRecipe().getResult().getAmount());
+            saveCraftingStats();
         }
+
+    }
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        loadConfiguration();
     }
 
     @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+    public boolean onCommand(@NotNull CommandSender sender,@NotNull Command command,@NotNull String label, String[] args) {
         if (args.length == 0) {
             if (sender instanceof Player) {
                 openMainMenu((Player) sender);
@@ -86,6 +158,15 @@ public class CraftingTracker extends JavaPlugin implements Listener, TabExecutor
         }
         inventory.setItem(11, leaderboardItem);
 
+        // create Close Main Menu //
+        ItemStack closeItem = new ItemStack(Material.BARRIER);
+        ItemMeta closeMeta = closeItem.getItemMeta();
+        if (closeMeta != null) {
+            closeMeta.setDisplayName("Close");
+            closeItem.setItemMeta(closeMeta);
+        }
+        inventory.setItem(13, closeItem);
+
         // Create Crafting Stats item
         ItemStack statsItem = new ItemStack(Material.CRAFTING_TABLE);
         ItemMeta statsMeta = statsItem.getItemMeta();
@@ -116,11 +197,13 @@ public class CraftingTracker extends JavaPlugin implements Listener, TabExecutor
             Map.Entry<Material, Integer> entry = statsList.get(i);
             ItemStack item = new ItemStack(entry.getKey());
             ItemMeta meta = item.getItemMeta();
-            meta.setDisplayName(entry.getKey().toString());
-            List<String> lore = new ArrayList<>();
-            lore.add("Crafted: " + entry.getValue());
-            meta.setLore(lore);
-            item.setItemMeta(meta);
+            if (meta != null) {
+                meta.setDisplayName(entry.getKey().toString());
+                List<String> lore = new ArrayList<>();
+                lore.add("Crafted: " + entry.getValue());
+                meta.setLore(lore);
+                item.setItemMeta(meta);
+            }
             inventory.addItem(item);
         }
 
@@ -283,6 +366,40 @@ public class CraftingTracker extends JavaPlugin implements Listener, TabExecutor
                 .sum();
     }
 
+    //Save and load Functions //
+    private void saveCraftingStats() {
+        File file = new File(getDataFolder(), "craftingStats.yml");
+        FileConfiguration statsConfig = YamlConfiguration.loadConfiguration(file);
+        for (UUID playerId : craftingStats.keySet()) {
+            String playerKey = playerId.toString();
+            for (Material material : craftingStats.get(playerId).keySet()) {
+                int amount = craftingStats.get(playerId).get(material);
+                statsConfig.set(playerKey + "." + material.name(), amount);
+            }
+        }
+        try {
+            statsConfig.save(file);
+        } catch (IOException e) {
+            getLogger().severe("Could not save crafting stats to file: " + e.getMessage());
+        }
+    }
+
+    private void loadCraftingStats() {
+        File file = new File(getDataFolder(), "craftingStats.yml");
+        if (!file.exists()) return;
+        FileConfiguration statsConfig = YamlConfiguration.loadConfiguration(file);
+        for (String playerKey : statsConfig.getKeys(false)) {
+            UUID playerId = UUID.fromString(playerKey);
+            Map<Material, Integer> playerStats = new HashMap<>();
+            for (String materialKey : Objects.requireNonNull(statsConfig.getConfigurationSection(playerKey)).getKeys(false)) {
+                Material material = Material.valueOf(materialKey);
+                int amount = statsConfig.getInt(playerKey + "." + materialKey);
+                playerStats.put(material, amount);
+            }
+            craftingStats.put(playerId, playerStats);
+        }
+    }
+
     private List<Map.Entry<UUID, Integer>> getTopPlayers(Material material) {
         return craftingStats.entrySet().stream()
                 .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), entry.getValue().getOrDefault(material, 0)))
@@ -323,6 +440,7 @@ public class CraftingTracker extends JavaPlugin implements Listener, TabExecutor
                                     }
                                 } else if (title.startsWith("Top 10")) {
                                     Material material = Material.matchMaterial(title.split(" - ")[1]);
+                                    assert material != null;
                                     openTopPlayersGUI(player, material, currentPage - 1);
                                 }
                             } else if (event.getSlot() == 53) {
@@ -333,6 +451,7 @@ public class CraftingTracker extends JavaPlugin implements Listener, TabExecutor
                                     openLeaderboardGUI(player, currentPage + 1);
                                 } else if (title.startsWith("Top 10")) {
                                     Material material = Material.matchMaterial(title.split(" - ")[1]);
+                                    assert material != null;
                                     openTopPlayersGUI(player, material, currentPage + 1);
                                 }
                             }
@@ -363,6 +482,9 @@ public class CraftingTracker extends JavaPlugin implements Listener, TabExecutor
                         openLeaderboardGUI((Player) event.getWhoClicked(), 0);
                     } else if (currentItem.getType() == Material.CRAFTING_TABLE && "Crafting Stats".equals(currentItem.getItemMeta().getDisplayName())) {
                         openCraftingStatsGUI((Player) event.getWhoClicked(), ((Player) event.getWhoClicked()).getUniqueId(), 0);
+                    }else if(currentItem.getType() == Material.BARRIER && "Back".equals(currentItem.getItemMeta().getDisplayName())){
+                        // close the inventory
+                        ((Player) event.getWhoClicked()).closeInventory();
                     }
                 }
             }
@@ -371,7 +493,7 @@ public class CraftingTracker extends JavaPlugin implements Listener, TabExecutor
 
 
     @Override
-    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+    public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, String[] args) {
         if (args.length == 1) {
             return Bukkit.getOnlinePlayers().stream()
                     .map(Player::getName)
