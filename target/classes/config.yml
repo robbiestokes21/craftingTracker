@@ -2,9 +2,15 @@ config:
   database: false
   yml: true
 database:
-  enabled: true
   host: "localhost"
   port: "3306"
   database: "crafting_tracker"
   user: "root"
-  password: "password"
+  password: ""
+  type: "mysql"
+tracked-items:
+  - DIAMOND_SWORD
+  - IRON_PICKAXE
+  - GOLDEN_APPLE
+  - OAK_LOG
+  - STONE_BRICK

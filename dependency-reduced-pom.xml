@@ -24,7 +24,7 @@
       </plugin>
       <plugin>
         <artifactId>maven-shade-plugin</artifactId>
-        <version>3.5.3</version>
+        <version>3.6.0</version>
         <executions>
           <execution>
             <phase>package</phase>
@@ -33,6 +33,15 @@
             </goals>
           </execution>
         </executions>
+      </plugin>
+      <plugin>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>3.2.0</version>
+        <configuration>
+          <classesDirectory>${project.build.outputDirectory}</classesDirectory>
+          <outputDirectory>D:\MineCraftServer\server\1.21\plugins</outputDirectory>
+          <testClassesDirectory>${project.build.outputDirectory}</testClassesDirectory>
+        </configuration>
       </plugin>
     </plugins>
   </build>

@@ -8,4 +8,12 @@ commands:
     usage: /craftingstats <player>|leaderboard
     permission: craftingstats.use
     permission-message: You do not have permission!
-
+  reload:
+    description: Reloads the CraftingTracker configuration
+    usage: /reload
+    permission: craftingstats.admin
+    permission-message: You do not have permission!
+permissions:
+  craftingstats.admin:
+    description: Allows access to admin commands for CraftingTracker
+    default: op

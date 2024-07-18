@@ -1,6 +1,8 @@
 package com.dstokesncstudio.craftingTracker;
 
 
+import com.dstokesncstudio.craftingTracker.db.Database;
+import com.dstokesncstudio.craftingTracker.util.ConsoleColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
@@ -28,47 +30,63 @@ import java.io.IOException;
 
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.sql.SQLException;
 import java.util.*;
 import java.util.stream.Collectors;
 
 public class CraftingTracker extends JavaPlugin implements Listener, TabExecutor {
 
     private final Map<UUID, Map<Material, Integer>> craftingStats = new HashMap<>();
+    private Database database;
     //TODO Add save and load of all the player stats once plugin updates.
     File dataFile;
 
-    //TODO Add this once the database class is set.
-    //Database Stuff //
-    /*
-    private boolean databaseEnabled;
-    private String dbHost;
-    private int dbPort;
-    private String dbName;
-    private String dbUser;
-    private String dbPassword;
-    */
-
     @Override
     public void onEnable() {
-        //TODO This is for the saving and loading of the config file
-       /*
+
         // Save the default config if it doesn't exist
-        // saveDefaultConfig();
+        saveDefaultConfig();
 
         // Load the configuration
-        // loadConfiguration();
-
-        */
+        loadConfiguration();
 
         // Register events and commands
         Bukkit.getPluginManager().registerEvents(this, this);
         Objects.requireNonNull(this.getCommand("craftingstats")).setExecutor(this);
         Objects.requireNonNull(this.getCommand("craftingstats")).setTabCompleter(this);
+        Objects.requireNonNull(this.getCommand("reload")).setExecutor(this);
 
         dataFile = new File(getDataFolder(), "craftingStats.yml");
         if (!dataFile.exists()) {
             saveResource("craftingStats.yml", false); // Create the file if it doesn't exist
         }
+
+
+        FileConfiguration config = getConfig();
+
+        boolean databaseEnabled = config.getBoolean("config.database");
+        String dbHost = config.getString("database.host");
+        int dbPort = config.getInt("database.port");
+        String dbName = config.getString("database.database");
+        String dbUser = config.getString("database.user");
+        String dbPassword = config.getString("database.password");
+        String dbType = config.getString("database.type");
+
+        if(databaseEnabled) {
+            getLogger().info("Database: Enabled");
+            //TODO Do database stuff here
+            this.database = new Database(dbHost, dbPort, dbUser, dbPassword, dbName, dbType);
+            try {
+                this.database.initializeDatabase();
+            } catch (SQLException e) {
+                System.out.println(ConsoleColor.RED + "Database initialization failed!!" + ConsoleColor.RESET);
+            }
+
+        }else{
+            getLogger().info("Database: disabled");
+        }
+        List<String> trackedItems = config.getStringList("tracked-items");
+        getLogger().info( ConsoleColor.GREEN + String.join(", ", trackedItems) +ConsoleColor.RESET);
         loadCraftingStats();
     }
     @Override
@@ -77,22 +95,7 @@ public class CraftingTracker extends JavaPlugin implements Listener, TabExecutor
     }
     //TODO use this latter when creating the database class.
     private void loadConfiguration() {
-        /*
-        FileConfiguration config = getConfig();
 
-        databaseEnabled = config.getBoolean("database.enabled");
-        dbHost = config.getString("database.host");
-        dbPort = config.getInt("database.port");
-        dbName = config.getString("database.database");
-        dbUser = config.getString("database.user");
-        dbPassword = config.getString("database.password");
-
-        getLogger().info("Database enabled: " + databaseEnabled);
-        if (databaseEnabled) {
-            getLogger().info("Connecting to database at " + dbHost + ":" + dbPort);
-            // Initialize your database connection here
-        }
-         */
     }
 
     @EventHandler
@@ -100,6 +103,12 @@ public class CraftingTracker extends JavaPlugin implements Listener, TabExecutor
         if (event.getWhoClicked() instanceof Player player) {
             UUID playerId = player.getUniqueId();
             Material itemType = event.getRecipe().getResult().getType();
+
+            // Check if the itemType is in the list of tracked items
+            List<String> trackedItems = getConfig().getStringList("tracked-items");
+            if (!trackedItems.contains(itemType.name())) {
+                return;
+            }
 
             craftingStats.putIfAbsent(playerId, new HashMap<>());
             Map<Material, Integer> playerStats = craftingStats.get(playerId);
@@ -116,6 +125,18 @@ public class CraftingTracker extends JavaPlugin implements Listener, TabExecutor
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender,@NotNull Command command,@NotNull String label, String[] args) {
+        if(command.getName().equalsIgnoreCase("reload")) {
+            if(sender.hasPermission("craftingstats.admin")) {
+                reloadConfig();
+                sender.sendMessage("CraftingTracker configuration reloaded.");
+                return true;
+            }else{
+                sender.sendMessage("You don't have permission to use this command.");
+                return false;
+            }
+
+        }
+
         if (args.length == 0) {
             if (sender instanceof Player) {
                 openMainMenu((Player) sender);
